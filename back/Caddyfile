@@ -1,0 +1,22 @@
+# =============================================================================
+#  Yordamchim BACKEND — Caddy (avtomatik HTTPS)
+#
+#  DNS: api.yordamchim.uz  ->  A record  ->  backend VPS IP
+#  Caddy sertifikatni Let's Encrypt'dan o'zi oladi va yangilaydi.
+#  X-Forwarded-Proto header'ini qo'shadi -> Django SECURE_PROXY_SSL_HEADER.
+# =============================================================================
+
+{
+	email admin@yordamchim.uz
+}
+
+api.yordamchim.uz {
+	encode gzip zstd
+
+	# Admin PPTX yuklash / slayd stream uchun yetarli tana hajmi.
+	request_body {
+		max_size 60MB
+	}
+
+	reverse_proxy backend:8000
+}

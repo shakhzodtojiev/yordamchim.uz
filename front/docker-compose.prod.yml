@@ -1,0 +1,51 @@
+# =============================================================================
+#  Yordamchim FRONTEND — mustaqil production to'plami
+#
+#  O'z-o'zicha yetarli: Next.js(standalone) + Caddy(avto-HTTPS).
+#  Backend'dan MUTLAQO mustaqil deploy bo'ladi — public API domeni orqali
+#  gaplashadi (umumiy Docker tarmoq yo'q).
+#
+#    frontend : Next.js standalone (ichki :3000)
+#    caddy    : 80/443 -> yordamchim.uz + www uchun TLS + reverse proxy
+#
+#  Ishga tushirish (frontend papkasidan):
+#    docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+#
+#  DIQQAT: NEXT_PUBLIC_* build paytida bundle'ga baked bo'ladi. Ularni
+#  o'zgartirsangiz `--build` bilan qayta build QILISH shart (runtime yetmaydi).
+# =============================================================================
+
+name: yordamchim-frontend
+
+services:
+  frontend:
+    build:
+      context: .
+      target: runtime
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:?masalan https://api.yordamchim.uz}
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:?masalan https://yordamchim.uz}
+    image: yordamchim-frontend:prod
+    restart: unless-stopped
+    environment:
+      # Server-side (RSC / server actions). Alohida deploy -> public API domeni.
+      API_BASE_URL: ${API_BASE_URL:-https://api.yordamchim.uz}
+      ACCESS_TOKEN_COOKIE: ${ACCESS_TOKEN_COOKIE:-uh_access}
+      REFRESH_TOKEN_COOKIE: ${REFRESH_TOKEN_COOKIE:-uh_refresh}
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data       # Let's Encrypt sertifikatlari — persist
+      - caddy_config:/config
+    depends_on:
+      - frontend
+
+volumes:
+  caddy_data:
+  caddy_config:

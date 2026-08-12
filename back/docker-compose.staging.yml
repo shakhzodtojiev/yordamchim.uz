@@ -1,0 +1,21 @@
+services:
+  yordamchim-backend:
+    image: registry.gitlab.com/servisoft.uz/yordamchim/back:latest
+    container_name: yordamchim-backend-staging
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:10042:8000"
+    networks:
+      - yordamchim-backend-staging
+      - postgres
+    env_file:
+      - .env
+    environment:
+      - DJANGO_ENV=staging
+      - TZ=Asia/Tashkent
+
+networks:
+  yordamchim-backend-staging:
+    driver: bridge
+  postgres:
+    external: true

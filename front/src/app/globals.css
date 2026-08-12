@@ -1,0 +1,293 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Surfaces — slightly cooled white with deeper text for crisper contrast. */
+    --background: 240 20% 99%;
+    --foreground: 224 32% 14%;
+    --card: 0 0% 100%;
+    --card-foreground: 224 32% 14%;
+
+    /* Primary — vibrant emerald. Calm enough for large surfaces, saturated
+       enough that buttons still pop. Foreground is near-white. */
+    --primary: 158 64% 40%;
+    --primary-foreground: 158 30% 98%;
+
+    /* Soft tonal layer used for muted chips, subtle backgrounds, etc. */
+    --secondary: 240 22% 96%;
+    --secondary-foreground: 224 32% 14%;
+    --muted: 240 22% 96%;
+    --muted-foreground: 224 16% 46%;
+    --accent: 158 60% 95%;
+    --accent-foreground: 158 65% 22%;
+
+    /* Status colors — emerald success, amber warning, red destructive. */
+    --success: 158 70% 42%;
+    --success-foreground: 158 30% 98%;
+    --warning: 38 95% 55%;
+    --warning-foreground: 38 30% 14%;
+    --destructive: 358 78% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Luxury accent — soft amber/gold used on the landing page hero, CTAs,
+       and decorative highlights. Deliberately separate from --warning so we
+       can recolour the marketing surface without touching status badges. */
+    --gold: 38 92% 56%;
+    --gold-foreground: 38 30% 14%;
+
+    --border: 240 16% 90%;
+    --input: 240 16% 90%;
+    --ring: 158 64% 40%;
+    --radius: 0.85rem;
+
+    /* Soft shadow stack tuned for the lighter background. */
+    --shadow-sm: 0 1px 2px 0 hsl(224 32% 14% / 0.04);
+    --shadow-md: 0 4px 14px -4px hsl(224 32% 14% / 0.08),
+      0 2px 4px -2px hsl(224 32% 14% / 0.06);
+    --shadow-lg: 0 12px 32px -8px hsl(158 50% 28% / 0.18),
+      0 6px 12px -6px hsl(224 32% 14% / 0.08);
+  }
+
+  .dark {
+    /* Deep navy surface, easy on the eyes for long study sessions. */
+    --background: 230 28% 8%;
+    --foreground: 220 30% 96%;
+    --card: 228 26% 11%;
+    --card-foreground: 220 30% 96%;
+
+    /* Slightly lighter emerald so it stays visible on the dark surface. */
+    --primary: 158 60% 55%;
+    --primary-foreground: 158 40% 10%;
+
+    --secondary: 228 22% 16%;
+    --secondary-foreground: 220 30% 96%;
+    --muted: 228 22% 16%;
+    --muted-foreground: 220 14% 64%;
+    --accent: 158 40% 18%;
+    --accent-foreground: 158 70% 82%;
+
+    --success: 158 60% 52%;
+    --success-foreground: 158 30% 12%;
+    --warning: 40 90% 60%;
+    --warning-foreground: 40 30% 12%;
+    --destructive: 358 70% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --gold: 40 90% 62%;
+    --gold-foreground: 40 30% 12%;
+
+    --border: 228 22% 18%;
+    --input: 228 22% 18%;
+    --ring: 158 60% 55%;
+
+    --shadow-sm: 0 1px 2px 0 hsl(0 0% 0% / 0.4);
+    --shadow-md: 0 4px 14px -4px hsl(0 0% 0% / 0.5),
+      0 2px 4px -2px hsl(0 0% 0% / 0.4);
+    --shadow-lg: 0 16px 40px -8px hsl(0 0% 0% / 0.6),
+      0 6px 12px -6px hsl(0 0% 0% / 0.4);
+  }
+
+  * {
+    @apply border-border;
+  }
+  /* In-page anchor links (landing nav, etc.) glide smoothly. The
+     `scroll-padding-top` clears the sticky 4rem nav so targets sit just
+     below it instead of slipping behind the bar. */
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 5rem;
+  }
+  /* Honour OS-level "reduce motion" preference. */
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* --- Telegram Mini App overrides ----------------------------------- */
+  /* When `data-tma="1"` is set on <html> (early-detection script in
+     layout.tsx), drop the standalone web chrome — Telegram already shows
+     its own header/buttons. Sidebar lives only on md+ anyway, but we hide
+     it just in case TMA renders on a tablet WebView. */
+  html[data-tma="1"] [data-app-shell="topbar"],
+  html[data-tma="1"] [data-app-shell="sidebar"],
+  html[data-tma="1"] [data-app-shell="bottom-nav"] {
+    display: none !important;
+  }
+
+  /* The shell main pads the bottom on mobile to clear our bottom-nav.
+     Inside TMA there is no bottom-nav, so reclaim that space. */
+  html[data-tma="1"] [data-app-shell="main"] {
+    padding-bottom: 1rem;
+  }
+
+  /* Public landing page is unhelpful inside Telegram — visitors arrive
+     already authenticated via the bot. Hide for now; we'll route them
+     straight to /dashboard once auto-login lands. */
+  html[data-tma="1"] [data-landing-only] {
+    display: none !important;
+  }
+}
+
+@layer utilities {
+  .no-select {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-user-drag: none;
+  }
+
+  /* Card surfaces opt into hover-lift via this class. Pairs nicely with
+     <Card> primitive which already has the rounded border. */
+  .card-hover {
+    transition:
+      transform 200ms cubic-bezier(0.4, 0, 0.2, 1),
+      box-shadow 200ms cubic-bezier(0.4, 0, 0.2, 1),
+      border-color 200ms ease-out;
+  }
+  .card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+    border-color: hsl(var(--primary) / 0.35);
+  }
+
+  /* Soft gradient sheet behind hero/heading blocks. */
+  .bg-soft-gradient {
+    background: radial-gradient(
+        circle at 0% 0%,
+        hsl(var(--primary) / 0.08),
+        transparent 50%
+      ),
+      radial-gradient(
+        circle at 100% 0%,
+        hsl(var(--accent) / 0.5),
+        transparent 60%
+      );
+  }
+
+  /* Vibrant button gradient — used by the default Button variant. */
+  .bg-primary-gradient {
+    background-image: linear-gradient(
+      135deg,
+      hsl(var(--primary)),
+      hsl(158 75% 28%)
+    );
+  }
+
+  /* Skeleton shimmer — drop-in for loading placeholders. */
+  .skeleton-shimmer {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--muted)) 0%,
+      hsl(var(--muted) / 0.6) 50%,
+      hsl(var(--muted)) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.6s linear infinite;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -100% 0;
+  }
+  100% {
+    background-position: 100% 0;
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@layer utilities {
+  .animate-fade-up {
+    animation: fade-up 360ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  }
+
+  /* --- Landing page utilities ---------------------------------------- */
+
+  /* Generous radial canvas behind the hero — emerald on one side, amber
+     glow on the other. Tuned for both light & dark via the CSS variables. */
+  .bg-hero-canvas {
+    background:
+      radial-gradient(
+        ellipse 60% 60% at 18% 20%,
+        hsl(var(--primary) / 0.18),
+        transparent 70%
+      ),
+      radial-gradient(
+        ellipse 50% 60% at 82% 30%,
+        hsl(var(--gold) / 0.16),
+        transparent 70%
+      ),
+      radial-gradient(
+        ellipse 80% 70% at 50% 100%,
+        hsl(var(--accent) / 0.7),
+        transparent 70%
+      );
+  }
+
+  /* Soft circular orb — drop a few of these absolutely-positioned behind
+     hero / CTA blocks for depth. */
+  .landing-orb {
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(48px);
+    pointer-events: none;
+    opacity: 0.55;
+  }
+
+  /* Animated subtle float — used on hero illustration / orbs. */
+  .animate-float-slow {
+    animation: float-slow 9s ease-in-out infinite;
+  }
+  .animate-float-slower {
+    animation: float-slow 14s ease-in-out infinite;
+  }
+
+  /* Gold-tinted CTA — premium accent button used on the landing only. */
+  .bg-gold-gradient {
+    background-image: linear-gradient(
+      135deg,
+      hsl(var(--gold)),
+      hsl(28 92% 52%)
+    );
+  }
+
+  /* Glassy card surface for feature blocks on the landing. */
+  .glass-card {
+    background: hsl(var(--card) / 0.7);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid hsl(var(--border));
+  }
+
+  /* Display heading — geometric, tighter tracking. */
+  .font-display {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+}
+
+@keyframes float-slow {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-14px);
+  }
+}

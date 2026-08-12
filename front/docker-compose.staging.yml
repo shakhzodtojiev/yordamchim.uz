@@ -1,0 +1,11 @@
+services:
+  yordamchim-frontend:
+    # Keep staging on Docker's built-in bridge; no per-project subnet needed.
+    network_mode: bridge
+    image: registry.gitlab.com/servisoft.uz/yordamchim/front:latest
+    container_name: yordamchim-frontend-staging
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:10043:3000"
+    env_file:
+      - .env

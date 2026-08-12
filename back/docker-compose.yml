@@ -1,0 +1,33 @@
+services:
+  yordamchim-backend:
+    image: registry.gitlab.com/servisoft.uz/yordamchim/back:latest
+    container_name: yordamchim-backend
+    # unless-stopped so the container comes back after a host reboot / daemon
+    # restart — on-failure leaves prod down until someone SSHes in.
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:10034:8000"
+    networks:
+      - yordamchim-backend
+      - postgres
+    env_file:
+      - .env
+    environment:
+      - DJANGO_ENV=production
+      - TZ=Asia/Tashkent
+    # No -f: a running gunicorn that returns 400 (DisallowedHost for the
+    # localhost probe) still proves the process is up; only a refused
+    # connection (gunicorn never bound) fails the check. start_period covers
+    # migrate + collectstatic before the socket is bound.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -o /dev/null http://localhost:8000/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+
+networks:
+  yordamchim-backend:
+    driver: bridge
+  postgres:
+    external: true

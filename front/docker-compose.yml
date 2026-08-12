@@ -1,0 +1,23 @@
+services:
+  yordamchim-frontend:
+    # Use Docker's built-in bridge so Compose does not allocate another
+    # project subnet on hosts that have exhausted the default address pools.
+    network_mode: bridge
+    image: registry.gitlab.com/servisoft.uz/yordamchim/front:latest
+    container_name: yordamchim-frontend
+    # unless-stopped so the container restarts after a host reboot.
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:10035:3000"
+    env_file:
+      - .env
+    # Node 20 has global fetch; resolves on any HTTP response (server up),
+    # rejects only on a refused connection (server never started).
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "node -e \"fetch('http://localhost:3000/').then(()=>process.exit(0)).catch(()=>process.exit(1))\""
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s

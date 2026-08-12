@@ -1,0 +1,19 @@
+# =============================================================================
+#  Yordamchim FRONTEND — Caddy (avtomatik HTTPS)
+#
+#  DNS: yordamchim.uz + www.yordamchim.uz  ->  A record  ->  frontend VPS IP
+#  Caddy sertifikatni Let's Encrypt'dan o'zi oladi.
+# =============================================================================
+
+{
+	email admin@yordamchim.uz
+}
+
+yordamchim.uz {
+	encode gzip zstd
+	reverse_proxy frontend:3000
+}
+
+www.yordamchim.uz {
+	redir https://yordamchim.uz{uri} permanent
+}

@@ -1,0 +1,215 @@
+variables:
+  DOCKERFILE: Dockerfile
+  TAG: $CI_COMMIT_REF_NAME-$CI_COMMIT_SHORT_SHA-$(date +%s)
+  PROJECT_NAME: ${CI_PROJECT_NAME}
+  DOCKER_DRIVER: overlay2
+  DOCKER_BUILDKIT: 1
+
+image: docker:20.10-dind
+services:
+  - docker:20.10-dind
+
+stages:
+  - build-push
+  - deploy
+
+# ----------------- Templates ------------------
+
+.ansible_template:
+  before_script:
+    - |-
+      if [[ $CI_COMMIT_REF_NAME == 'staging' ]]; then
+        SERVICE_BASE_DIR=yordamchim-staging
+        DOCKER_COMPOSE=docker-compose.staging.yml
+        cat $(echo $ENV_STAGING) > .env
+      elif [[ $CI_COMMIT_REF_NAME == 'main' ]]; then
+        SERVICE_BASE_DIR=yordamchim-prod
+        DOCKER_COMPOSE=docker-compose.yml
+        cat $(echo $ENV_PROD) > .env
+      fi
+    - echo $SSH_KEY_BASE64 |base64 -d > id_rsa
+    - chmod 400 id_rsa
+    - |-
+      cat <<EOF >ansible.cfg
+      [defaults]
+      host_key_checking = False
+      EOF
+    - |-
+      cat <<EOF >host
+      [app]
+      $HOST  ansible_user=$USER ansible_port=$PORT
+      EOF
+    - |-
+      cat <<EOF >deploy.yml
+      ---
+      - name: Deploy
+        hosts: all
+        become: yes
+        become_user: root
+        tasks:
+          - name: Login to registry
+            shell:
+              cmd: docker login {{ docker_registry }} -u {{ docker_username }} -p {{ docker_pass }}
+
+          - name: Pull new image
+            shell:
+              cmd: docker pull {{ docker_image }}:{{ docker_image_tag }}
+
+          - name: Logout from registry
+            shell:
+              cmd: docker logout {{ docker_registry }}
+
+          - name: Create directory if it doesn't exist
+            ansible.builtin.file:
+              path: /var/www/{{service_base_dir}}/{{ service_name }}/
+              state: directory
+              mode: '0755'
+
+          - name: Check if docker-compose.yml exists
+            stat:
+              path: /var/www/{{service_base_dir}}/{{ service_name }}/docker-compose.yml
+            register: compose_file
+
+          - name: Stop old container
+            # Use stop+rm instead of down — down also tries to remove the
+            # project network, which fails when another deployment with
+            # the same folder name (e.g. smart-navoi-front) shares the
+            # default network. stop+rm only touches our service container.
+            # `|| true` keeps the playbook going on first deploy when
+            # nothing is running yet.
+            shell:
+              cmd: |
+                docker-compose stop 2>/dev/null || true
+                docker-compose rm -f 2>/dev/null || true
+            args:
+              chdir: /var/www/{{service_base_dir}}/{{ service_name }}/
+            when: compose_file.stat.exists
+            ignore_errors: yes
+
+          - name: Copy new/replase docker-compose
+            copy:
+              src: "{{docker_compose}}"
+              dest: /var/www/{{service_base_dir}}/{{ service_name }}/docker-compose.yml
+              backup: false
+
+          - name: Replace image tag
+            replace:
+              path: /var/www/{{service_base_dir}}/{{ service_name }}/docker-compose.yml
+              regexp: "{{ docker_image }}.*"
+              replace: "{{ docker_image }}:{{ docker_image_tag }}"
+
+          - name: Copy new/replase .env
+            copy:
+              src: ".env"
+              dest: /var/www/{{service_base_dir}}/{{ service_name }}/.env
+              backup: true
+
+
+          - name: Restart docker compose
+            # The "Stop old container" step above already stopped+removed
+            # the container. Plain `up -d` brings up the new one from the
+            # freshly-copied compose file, without touching networks that
+            # might be shared with other projects on the same host.
+            shell:
+              cmd: docker-compose up -d
+            args:
+              chdir: /var/www/{{service_base_dir}}/{{ service_name }}/
+
+          - name: Wait service 10s
+            shell:
+              cmd: sleep 10
+            args:
+              chdir: /var/www/{{service_base_dir}}/{{ service_name }}/
+
+          - name: Change to the directory with docker-compose.yml
+            command: chdir=/var/www/{{service_base_dir}}/{{ service_name }}/ docker-compose ps
+            register: compose_ps_output
+
+          - name: Print docker-compose ps output
+            debug:
+              var: compose_ps_output.stdout
+
+          - name: Check if services are running
+            assert:
+              that:
+                - "'Up' in compose_ps_output.stdout"
+              fail_msg: "One or more services are not running."
+              success_msg: "All services are running."
+      EOF
+
+# ----------------- END Templates -----------------
+
+build-push:
+  stage: build-push
+  timeout: 30m
+  only:
+    - main
+#    - staging
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_JOB_TOKEN $CI_REGISTRY
+    - TAG="$CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA-$(date +%s)"
+    - echo -e "------ Image name is $CI_REGISTRY_IMAGE:$TAG ------"
+    - echo TAG=$TAG > job_vars
+    - echo CI_REGISTRY_IMAGE=$CI_REGISTRY_IMAGE >> job_vars
+    # NEXT_PUBLIC_* must be passed as docker build-args because Next.js
+    # inlines them into the bundle at build time. Source the same env
+    # file the deploy job copies to the server so build and runtime
+    # stay in sync. POSIX shell — docker:20.10-dind has no bash.
+    #
+    # Defensive: if the target env File-variable is unset OR points at a
+    # missing file, warn and continue with an empty .env.build instead of
+    # `cat: can't open ''` crashing the whole pipeline. The build then bakes
+    # empty NEXT_PUBLIC_* into the bundle (localhost fallback per constants.ts)
+    # — good enough for a staging-without-env-file scenario, bad for prod.
+    - |-
+      : > .env.build
+      case "$CI_COMMIT_REF_NAME" in
+        staging) ENV_SRC="$ENV_STAGING" ;;
+        main)    ENV_SRC="$ENV_PROD" ;;
+        *)       ENV_SRC="" ;;
+      esac
+      if [ -n "$ENV_SRC" ] && [ -f "$ENV_SRC" ]; then
+        cat "$ENV_SRC" > .env.build
+      else
+        echo "WARN: no env file for '$CI_COMMIT_REF_NAME' (var empty or file missing)"
+        echo "      NEXT_PUBLIC_* will be baked as empty strings."
+      fi
+    - set -a && . ./.env.build && set +a
+  script:
+    - docker build -t $CI_REGISTRY_IMAGE:$TAG --file $DOCKERFILE
+        --build-arg CI_JOB_TOKEN=$CI_JOB_TOKEN
+        --build-arg CI_REGISTRY=$CI_REGISTRY
+        --build-arg NEXT_PUBLIC_API_BASE_URL="$NEXT_PUBLIC_API_BASE_URL"
+        --build-arg NEXT_PUBLIC_SITE_URL="$NEXT_PUBLIC_SITE_URL"
+        .
+    - docker push $CI_REGISTRY_IMAGE:$TAG
+    - docker logout $CI_REGISTRY
+  artifacts:
+    paths:
+      - job_vars
+    expire_in: 5 mins
+
+deploy:
+  image: alpine/ansible:2.18.1
+  stage: deploy
+  timeout: 30m
+  variables:
+    ANSIBLE_CONFIG: "ansible.cfg"
+  only:
+    - main
+#    - staging
+  needs:
+    - build-push
+  extends: .ansible_template
+  script:
+    # alpine/ansible runs jobs with /bin/sh; `source` is not POSIX there.
+    - . job_vars
+    - echo $CI_PROJECT_NAME
+    - echo $TAG
+    - ls -la
+    - ansible-playbook -vv -i host deploy.yml --key-file id_rsa
+      -e "docker_registry=$CI_REGISTRY docker_username=$CI_REGISTRY_USER docker_pass=$CI_JOB_TOKEN"
+      -e "docker_image=$CI_REGISTRY_IMAGE docker_image_tag=$TAG"
+      -e "service_name=$CI_PROJECT_NAME"
+      -e "service_base_dir=$SERVICE_BASE_DIR"
+      -e "docker_compose=$DOCKER_COMPOSE"

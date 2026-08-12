@@ -1,0 +1,15 @@
+node_modules
+.next
+out
+dist
+.vercel
+.turbo
+.git
+.gitignore
+.env
+.env.*
+.DS_Store
+README.md
+Dockerfile
+.dockerignore
+next-env.d.ts
